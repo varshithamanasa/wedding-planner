@@ -10,6 +10,9 @@
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
 
   const uid = () => Math.random().toString(36).slice(2, 10);
+  // Unguessable per-guest token (about 96 bits) used in personal RSVP links.
+  const newToken = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(2, '0')).join('');
+  state.guests.forEach(g => { if (!g.token) g.token = newToken(); });
   const el = (tag, props = {}, ...kids) => {
     const n = Object.assign(document.createElement(tag), props);
     kids.flat().forEach(k => n.append(k));
@@ -30,10 +33,22 @@
 
   const encode = obj => btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
   const decode = s => JSON.parse(decodeURIComponent(escape(atob(s))));
-  const inviteUrl = () => {
-    const { couple, date, time, venue, address, notes, dress, contact, schedule } = state.event;
-    const payload = { couple, date, time, venue, address, notes, dress, contact, schedule };
-    return `${location.origin}${location.pathname}#invite=${encode(payload)}`;
+  // Only public fields go into links. The admin key never does.
+  const inviteUrl = guest => {
+    const { couple, date, time, venue, address, rVenue, rAddress, welcome, respondBy, notes, dress, contact, schedule, scriptUrl } = state.event;
+    const payload = { couple, date, time, venue, address, rVenue, rAddress, welcome, respondBy, notes, dress, contact, schedule, scriptUrl };
+    const t = guest && scriptUrl ? `&t=${guest.token}` : '';
+    return `${location.origin}${location.pathname}#invite=${encode(payload)}${t}`;
+  };
+  const scriptReady = () => state.event.scriptUrl && state.event.adminKey;
+  const call = async (method, body, params) => {
+    const u = state.event.scriptUrl;
+    const res = method === 'GET'
+      ? await fetch(`${u}?${new URLSearchParams(params)}`)
+      : await fetch(u, { method: 'POST', body: JSON.stringify(body) }); // text/plain: no CORS preflight
+    const j = await res.json();
+    if (j.error) throw new Error(j.error);
+    return j;
   };
 
   // ---------- header ----------
@@ -62,7 +77,7 @@
       return;
     }
     ul.replaceChildren(...rows.map(g => {
-      const meta = [g.size > 1 ? `Party of ${g.size}` : '', g.group, g.table && `Table ${g.table}`, g.diet].filter(Boolean).join(' · ');
+      const meta = [g.size > 1 ? `Party of ${g.size}` : '', g.group, g.table && `Table ${g.table}`, g.plusOne && `+1 ${g.plusOne}`, g.diet].filter(Boolean).join(' · ');
       const li = el('li', { className: 'clickable' },
         el('div', {}, el('strong', { textContent: g.name }), el('div', { className: 'meta', textContent: meta })),
         el('span', { className: `badge ${g.rsvp}`, textContent: RSVP[g.rsvp] }));
@@ -85,11 +100,13 @@
     if (ev.submitter?.value !== 'save') return;
     const d = Object.fromEntries(new FormData(gform));
     d.size = Math.max(1, parseInt(d.size, 10) || 1);
-    if (editing) Object.assign(editing, d); else state.guests.push({ id: uid(), ...d });
+    // dirty: this edit should overwrite the sheet's reply fields on the next sync
+    if (editing) Object.assign(editing, d, { dirty: true }); else state.guests.push({ id: uid(), token: newToken(), dirty: true, ...d });
     save(); renderGuests(); renderShareList();
   });
   $('#deleteGuest').onclick = () => {
     if (editing && confirm(`Delete ${editing.name}?`)) {
+      if (scriptReady()) call('POST', { action: 'remove', key: state.event.adminKey, token: editing.token }).catch(() => {});
       state.guests = state.guests.filter(g => g !== editing);
       save(); dlg.close(); renderGuests(); renderShareList();
     }
@@ -99,7 +116,7 @@
 
   // CSV
   const csvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const COLS = ['name', 'size', 'rsvp', 'email', 'phone', 'group', 'table', 'diet'];
+  const COLS = ['name', 'size', 'rsvp', 'email', 'phone', 'group', 'table', 'diet', 'plusOne'];
   $('#exportCsv').onclick = () => {
     const text = [COLS.join(','), ...state.guests.map(g => COLS.map(c => csvCell(g[c])).join(','))].join('\n');
     const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/csv' })), download: 'guests.csv' });
@@ -125,7 +142,7 @@
     const idx = Object.fromEntries(head.map((h, i) => [h.trim().toLowerCase(), i]));
     if (idx.name === undefined) return alert('The CSV needs a "name" column.');
     for (const r of rows) {
-      const g = { id: uid() };
+      const g = { id: uid(), token: newToken(), dirty: true };
       COLS.forEach(c => g[c] = idx[c] !== undefined ? (r[idx[c]] || '').trim() : '');
       g.size = Math.max(1, parseInt(g.size, 10) || 1);
       if (!RSVP[g.rsvp]) g.rsvp = 'pending';
@@ -172,17 +189,51 @@
   });
 
   // ---------- share ----------
-  const shareText = () => `You're invited${state.event.couple ? ' to ' + state.event.couple + "'s wedding" : ''}! Details and directions: ${inviteUrl()}`;
+  const shareText = g => `Dear ${g ? g.name : 'friend'}, you're invited${state.event.couple ? ' to the wedding of ' + state.event.couple : ''}! Details, directions and RSVP: ${inviteUrl(g)}`;
   function renderShare() { $('#shareLink').value = inviteUrl(); }
   function renderShareList() {
     const ul = $('#shareList');
-    const text = encodeURIComponent(shareText());
-    ul.replaceChildren(...state.guests.map(g => el('li', {},
-      el('span', { textContent: g.name }),
-      el('span', { className: 'row' },
-        g.phone ? el('a', { href: `sms:${g.phone}?&body=${text}`, textContent: 'Text' }) : '',
-        g.email ? el('a', { href: `mailto:${g.email}?subject=${encodeURIComponent('Wedding details')}&body=${text}`, textContent: 'Email' }) : ''))));
+    if (!state.guests.length) { ul.replaceChildren(el('li', { textContent: 'Add guests first.' })); return; }
+    ul.replaceChildren(...state.guests.map(g => {
+      const text = encodeURIComponent(shareText(g));
+      const copy = el('button', { type: 'button', textContent: 'Copy link' });
+      copy.onclick = async () => {
+        try { await navigator.clipboard.writeText(inviteUrl(g)); copy.textContent = 'Copied'; } catch { prompt('Copy this link', inviteUrl(g)); }
+        setTimeout(() => copy.textContent = 'Copy link', 1500);
+      };
+      return el('li', {},
+        el('div', {}, el('strong', { textContent: g.name }), el('div', { className: 'meta', textContent: g.respondedAt ? 'Replied' : '' })),
+        el('span', { className: 'row' }, copy,
+          g.phone ? el('a', { href: `sms:${g.phone}?&body=${text}`, textContent: 'Text' }) : '',
+          g.email ? el('a', { href: `mailto:${g.email}?subject=${encodeURIComponent('Wedding details')}&body=${text}`, textContent: 'Email' }) : ''));
+    }));
   }
+
+  async function syncNow() {
+    const status = $('#syncStatus');
+    if (!scriptReady()) { status.textContent = 'Add the web app URL and admin key on the Event tab first.'; return; }
+    status.textContent = 'Syncing...';
+    try {
+      const k = state.event.adminKey;
+      await call('POST', { action: 'sync', key: k, guests: state.guests.map(g => ({
+        token: g.token, name: g.name, size: g.size, email: g.email, phone: g.phone, group: g.group, table: g.table,
+        rsvp: g.rsvp, plusOne: g.plusOne, diet: g.diet, override: !!g.dirty })) });
+      state.guests.forEach(g => delete g.dirty);
+      const { guests } = await call('GET', null, { action: 'all', key: k });
+      let updated = 0;
+      for (const r of guests) {
+        const g = state.guests.find(x => x.token === r.token);
+        if (!g) continue;
+        const next = { rsvp: r.rsvp || 'pending', plusOne: r.plusOne || '', diet: r.diet || '', respondedAt: r.respondedAt || '' };
+        if (Object.keys(next).some(f => (g[f] || '') !== next[f])) { Object.assign(g, next); updated++; }
+      }
+      save(); renderGuests(); renderShareList();
+      status.textContent = `Synced. ${updated} guest${updated === 1 ? '' : 's'} updated.`;
+    } catch (err) {
+      status.textContent = `Sync failed (${err.message}). Check the URL, the key and that the script is deployed for "Anyone".`;
+    }
+  }
+  $('#syncNow').onclick = syncNow;
   $('#copyLink').onclick = async () => {
     try { await navigator.clipboard.writeText(inviteUrl()); $('#copyLink').textContent = 'Copied'; }
     catch { $('#shareLink').select(); }
@@ -195,6 +246,8 @@
   $('#emailAll').onclick = () => {
     const to = state.guests.map(g => g.email).filter(Boolean).join(',');
     if (!to) return alert('No guests have an email address yet.');
+    // One shared message, so it carries the general link. Personal links go out one by one.
+    if (state.event.scriptUrl && !confirm('This sends the general link without the RSVP form. For RSVP, send personal links to each guest instead. Continue?')) return;
     location.href = `mailto:?bcc=${encodeURIComponent(to)}&subject=${encodeURIComponent('Wedding details')}&body=${encodeURIComponent(shareText())}`;
   };
 
@@ -207,8 +260,55 @@
   };
 
   // ---------- guest-facing invite ----------
-  function showInvite(e) {
-    document.title = e.couple ? `${e.couple}: Wedding details` : 'Wedding details';
+  const longDate = d => d ? new Date(`${d}T12:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  const placeCard = (label, name, addr) => el('div', { className: 'place' },
+    el('div', { className: 'meta', textContent: label }),
+    el('strong', { textContent: name || '' }),
+    addr ? el('div', { className: 'meta', textContent: addr }) : '',
+    name || addr ? el('a', { href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([name, addr].filter(Boolean).join(', '))}`, target: '_blank', rel: 'noopener', textContent: 'Directions' }) : '');
+
+  function rsvpForm(e, token) {
+    const box = el('div', { className: 'rsvp' }, el('p', { className: 'muted', textContent: 'Loading your invitation...' }));
+    const get = new URL(e.scriptUrl); get.search = new URLSearchParams({ action: 'guest', token });
+    fetch(get).then(r => r.json()).then(g => {
+      if (g.error) throw new Error('nf');
+      let choice = g.rsvp === 'yes' || g.rsvp === 'no' ? g.rsvp : '';
+      const yes = el('button', { type: 'button', textContent: 'Joyfully accepts' });
+      const no = el('button', { type: 'button', textContent: 'Regretfully declines' });
+      const plus = el('input', { value: g.plusOne || '', maxLength: 100 });
+      const diet = el('input', { value: g.diet || '', maxLength: 100 });
+      const plusLabel = el('label', {}, +g.size === 2 ? 'Plus-one name' : 'Names of the others in your party', plus);
+      const dietLabel = el('label', {}, 'Dietary needs', diet);
+      const send = el('button', { type: 'button', className: 'primary', textContent: 'Send your response' });
+      const msg = el('p', { className: 'muted', role: 'status' });
+      const paint = () => {
+        yes.className = choice === 'yes' ? 'on' : ''; no.className = choice === 'no' ? 'on' : '';
+        plusLabel.hidden = !(choice === 'yes' && +g.size > 1); dietLabel.hidden = choice !== 'yes';
+        send.disabled = !choice;
+      };
+      yes.onclick = () => { choice = 'yes'; paint(); };
+      no.onclick = () => { choice = 'no'; paint(); };
+      send.onclick = async () => {
+        send.disabled = true; msg.textContent = 'Sending...';
+        try {
+          const r = await fetch(e.scriptUrl, { method: 'POST', body: JSON.stringify({ action: 'respond', token, rsvp: choice,
+            plusOne: choice === 'yes' ? plus.value : '', diet: choice === 'yes' ? diet.value : '' }) });
+          const j = await r.json();
+          if (!j.ok) throw new Error(j.error);
+          msg.textContent = choice === 'yes' ? 'Thank you! We cannot wait to celebrate with you. You can change your answer here until the deadline.' : 'Thank you for letting us know. We will miss you.';
+        } catch { msg.textContent = 'Sorry, that did not go through. Please try again or contact us directly.'; }
+        paint();
+      };
+      box.replaceChildren(
+        el('p', { className: 'muted', textContent: `Dear ${g.name}, will you attend?` }),
+        el('div', { className: 'choice' }, yes, no), plusLabel, dietLabel, send, msg);
+      paint();
+    }).catch(() => box.replaceChildren(el('p', { className: 'muted', textContent: 'We could not find your personal invitation. Please check the link or contact us.' })));
+    return box;
+  }
+
+  function showInvite(e, token) {
+    document.title = e.couple ? `${e.couple}: Wedding invitation` : 'Wedding invitation';
     $('#tabs').hidden = true;
     document.querySelector('main').hidden = true;
     $('#title').textContent = e.couple || 'You are invited';
@@ -218,26 +318,31 @@
       const t = s.time ? new Date(`2000-01-01T${s.time}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
       return el('li', {}, el('strong', { textContent: t }), ` ${s.what || ''}`);
     });
-    const reply = e.contact && (e.contact.includes('@')
+    const reply = !token && e.contact && (e.contact.includes('@')
       ? el('a', { className: 'primary', href: `mailto:${e.contact}?subject=${encodeURIComponent('RSVP')}`, textContent: 'RSVP by email' })
       : el('a', { className: 'primary', href: `sms:${e.contact}`, textContent: 'RSVP by text' }));
     inv.replaceChildren(el('div', { className: 'invite-card' },
-      el('h2', { textContent: e.venue || 'Venue' }),
-      el('p', { textContent: e.address || '' }),
-      e.dress ? el('p', {}, el('strong', { textContent: 'Dress code: ' }), e.dress) : '',
+      el('p', { className: 'meta', textContent: 'YOU ARE INVITED TO THE WEDDING OF' }),
+      e.welcome ? el('p', { textContent: e.welcome }) : '',
+      el('div', { className: 'places' },
+        e.venue || e.address ? placeCard('CEREMONY', e.venue, e.address) : '',
+        e.rVenue || e.rAddress ? placeCard('RECEPTION', e.rVenue, e.rAddress) : ''),
       sched.length ? el('ul', {}, sched) : '',
+      e.dress ? el('p', {}, el('strong', { textContent: 'Dress code: ' }), e.dress) : '',
       e.notes ? el('p', { textContent: e.notes }) : '',
-      el('div', { className: 'btns' },
-        e.venue || e.address ? el('a', { className: 'primary', href: googleDirections(e), target: '_blank', rel: 'noopener', textContent: 'Get directions' }) : '',
-        e.venue || e.address ? el('a', { href: appleDirections(e), target: '_blank', rel: 'noopener', textContent: 'Apple Maps' }) : '',
-        reply || ''),
-      e.venue || e.address ? el('iframe', { src: mapEmbed(e), title: 'Venue map', loading: 'lazy' }) : ''));
+      e.respondBy ? el('p', { className: 'meta', textContent: `Please respond by ${longDate(e.respondBy)}.` }) : '',
+      token && e.scriptUrl ? rsvpForm(e, token) : el('div', { className: 'btns' }, reply || ''),
+      e.venue || e.address ? el('iframe', { src: mapEmbed(e), title: 'Ceremony map', loading: 'lazy' }) : ''));
   }
 
   // ---------- boot ----------
-  const m = location.hash.match(/^#invite=(.+)$/);
+  // Hash looks like #invite=<base64>[&t=<token>]. Base64 contains "+", so split by hand.
+  const m = location.hash.match(/^#invite=([^&]+)(?:&t=([A-Za-z0-9]+))?$/);
   if (m) {
-    try { showInvite(decode(m[1])); } catch { document.body.textContent = 'This invite link looks broken.'; }
+    let ev;
+    try { ev = decode(m[1]); } catch {}
+    if (ev && !/^https:\/\/script\.google\.com\//.test(ev.scriptUrl || 'https://script.google.com/')) ev.scriptUrl = '';
+    if (ev) showInvite(ev, m[2]); else document.body.textContent = 'This invite link looks broken.';
   } else {
     renderHeader(); renderGuests(); renderEventForm();
   }

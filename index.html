@@ -48,8 +48,12 @@
         <label>Date<input name="date" type="date"></label>
         <label>Time<input name="time" type="time"></label>
       </div>
-      <label>Venue name<input name="venue" placeholder="Rosewood Gardens"></label>
-      <label>Venue address<input name="address" placeholder="123 Main St, City, State"></label>
+      <label>Welcome message<textarea name="welcome" rows="2" placeholder="We would be honoured to have you join us as we celebrate."></textarea></label>
+      <label>Respond by<input name="respondBy" type="date"></label>
+      <label>Ceremony venue<input name="venue" placeholder="Rosewood Gardens"></label>
+      <label>Ceremony address<input name="address" placeholder="123 Main St, City, State"></label>
+      <label>Reception venue (optional)<input name="rVenue"></label>
+      <label>Reception address (optional)<input name="rAddress"></label>
       <label>Parking and travel notes<textarea name="notes" rows="3" placeholder="Free parking behind the hall. Shuttle from the hotel at 3:30 pm."></textarea></label>
       <label>Dress code<input name="dress" placeholder="Garden formal"></label>
       <label>Reply to (email or phone)<input name="contact" placeholder="we@example.com"></label>
@@ -57,6 +61,12 @@
         <legend>Schedule</legend>
         <div id="schedule"></div>
         <button type="button" id="addItem">Add schedule item</button>
+      </fieldset>
+      <fieldset>
+        <legend>Online RSVP (Google Sheet)</legend>
+        <p class="muted">See apps-script/README.md. The web app URL is placed in guest links. The admin key stays in this browser only.</p>
+        <label>Apps Script web app URL<input name="scriptUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label>
+        <label>Admin key<input name="adminKey" type="password" autocomplete="off"></label>
       </fieldset>
       <button class="primary" type="submit">Save details</button>
       <span id="saved" class="muted" aria-live="polite"></span>
@@ -66,17 +76,24 @@
 
   <!-- SHARE -->
   <section id="tab-share" class="panel" hidden>
-    <p>This creates a private link with your event details and directions. It does not include your guest list. Anyone with the link can view it.</p>
-    <textarea id="shareLink" rows="4" readonly></textarea>
+    <h3>Replies</h3>
+    <p class="muted">Pull in new RSVPs from your Google Sheet and push your guest list to it. Do this before sending personal links.</p>
     <div class="row">
-      <button id="copyLink" class="primary">Copy link</button>
+      <button id="syncNow" class="primary">Sync with Google Sheet</button>
+      <span id="syncStatus" class="muted" aria-live="polite"></span>
+    </div>
+    <h3>Personal links</h3>
+    <p class="muted">Each guest gets their own link that greets them by name and records their reply. Links contain a secret token, so send each one only to that guest.</p>
+    <ul id="shareList" class="list"></ul>
+    <button id="emailAll">Email everyone with an address</button>
+    <h3>General link</h3>
+    <p class="muted">Event details and directions only, with no RSVP form.</p>
+    <textarea id="shareLink" rows="3" readonly></textarea>
+    <div class="row">
+      <button id="copyLink">Copy link</button>
       <button id="nativeShare">Share</button>
       <button id="previewLink">Preview as guest</button>
     </div>
-    <h3>Message guests individually</h3>
-    <p class="muted">Send the link by text or email to each guest, or to everyone with an email on file.</p>
-    <ul id="shareList" class="list"></ul>
-    <button id="emailAll">Email everyone with an address</button>
   </section>
 </main>
 
@@ -106,6 +123,7 @@
       <label>Table<input name="table"></label>
     </div>
     <label>Dietary needs<input name="diet"></label>
+    <label>Plus-one name<input name="plusOne"></label>
     <div class="row">
       <button value="save" class="primary" id="saveGuest">Save</button>
       <button value="cancel" formnovalidate>Cancel</button>
