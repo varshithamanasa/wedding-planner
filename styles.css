@@ -1,32 +1,33 @@
 /* Planner (admin) styles. The guest site lives in site.css. */
 :root {
-  --cream: #f6f6e9; --ink: #29322e; --card: #fdfbf7; --muted: #66706a; --line: #d9d9c6;
-  --accent: #29322e; --accent-text: #f6f6e9; --danger: #a33a2e;
+  --cream: #fbf3e2; --ink: #3b1410; --card: #fffaf0; --muted: #7a5c4f; --line: #e3cf9f; --maroon: #7a1424; --gold: #c8962e;
+  --accent: #7a1424; --accent-text: #fff4d6; --danger: #a33a2e;
   --yes: #3c6a45; --no: #9a3b32; --pending: #8a6a1f;
   --serif: 'Instrument Serif', Georgia, serif;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--cream); color: var(--ink); font: 16px/1.5 Inter, system-ui, sans-serif; }
-.top { text-align: center; padding: 32px 16px 8px; }
+.top { text-align: center; padding: 32px 16px 8px; border-top: 6px double var(--gold); }
+h1 { color: var(--maroon); }
 h1, h2, h3 { font-family: var(--serif); font-weight: 400; }
 h1 { margin: 0; font-size: 2.8rem; line-height: 1.1; letter-spacing: -.01em; }
 h3 { font-size: 1.5rem; margin: 28px 0 4px; }
 .muted { color: var(--muted); margin: 4px 0; }
 .tabs { display: flex; justify-content: center; gap: 4px; padding: 12px 16px; flex-wrap: wrap; }
 .tabs button { border: 0; background: none; padding: 8px 16px; border-radius: 999px; color: var(--muted); cursor: pointer; font-family: var(--serif); font-size: 1rem; letter-spacing: .14em; text-transform: uppercase; }
-.tabs button.active { background: var(--ink); color: var(--cream); }
+.tabs button.active { background: var(--maroon); color: #fff4d6; }
 main { max-width: 720px; margin: 0 auto; padding: 8px 16px 48px; }
 button, input, select, textarea { font: inherit; color: inherit; }
-button { padding: 9px 16px; border: 1px solid var(--ink); background: transparent; border-radius: 999px; cursor: pointer; }
-button.primary { background: var(--ink); color: var(--cream); }
+button { padding: 9px 16px; border: 1px solid var(--maroon); background: transparent; border-radius: 999px; cursor: pointer; }
+button.primary { background: var(--maroon); color: #fff4d6; }
 button.danger { color: var(--danger); border-color: var(--danger); }
 a { color: var(--ink); }
 input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
-:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--maroon); outline-offset: 2px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 12px 0; }
 .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-align: center; color: var(--muted); font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; }
-.stat b { display: block; font: 400 2.2rem/1.1 var(--serif); color: var(--ink); letter-spacing: 0; }
+.stat b { display: block; font: 400 2.2rem/1.1 var(--serif); color: var(--maroon); letter-spacing: 0; }
 .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .toolbar input { flex: 1 1 160px; width: auto; }
 .toolbar select { width: auto; }
@@ -48,6 +49,6 @@ dialog::backdrop { background: rgba(20, 26, 22, .5); }
 dialog h2 { font-size: 2rem; margin: 0 0 12px; }
 iframe { width: 100%; height: 280px; border: 1px solid var(--line); border-radius: 12px; margin-top: 16px; }
 .btns { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
-.btns a { text-decoration: none; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--ink); }
-.btns a.primary { background: var(--ink); color: var(--cream); }
+.btns a { text-decoration: none; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--maroon); }
+.btns a.primary { background: var(--maroon); color: #fff4d6; }
 @media (max-width: 480px) { .two { grid-template-columns: 1fr; } }
