@@ -6,7 +6,15 @@
   const load = () => {
     try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
   };
-  const state = Object.assign({ guests: [], event: { schedule: [] } }, load());
+  // Starting details, used until the planner saves its own.
+  const DEFAULT_EVENT = {
+    couple: 'Varshitha & Vishruth', date: '2027-02-11', time: '10:00',
+    venue: 'Austin Hindu Temple', address: '9801 Decker Lake Rd, Austin, TX 78724',
+    schedule: [
+      { time: '10:00', what: 'Vara Pooja' }, { time: '11:00', what: 'Muhurtham' },
+      { time: '12:00', what: 'Lunch' }, { time: '16:00', what: 'Reception' }]
+  };
+  const state = Object.assign({ guests: [], event: DEFAULT_EVENT }, load());
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
 
   const uid = () => Math.random().toString(36).slice(2, 10);
