@@ -63,9 +63,9 @@
     const q = $('#search').value.trim().toLowerCase();
     const f = $('#filter').value;
     const all = state.guests;
-    const sum = (arr) => arr.reduce((n, g) => n + (+g.size || 1), 0);
+    const sum = (arr, k = 'size') => arr.reduce((n, g) => n + (+g[k] || +g.size || 1), 0);
     $('#stats').replaceChildren(
-      ...[['Invited', sum(all)], ['Attending', sum(all.filter(g => g.rsvp === 'yes'))],
+      ...[['Invited', sum(all)], ['Attending', sum(all.filter(g => g.rsvp === 'yes'), 'count')],
           ['Declined', sum(all.filter(g => g.rsvp === 'no'))], ['Pending', sum(all.filter(g => g.rsvp === 'pending'))]]
         .map(([label, n]) => el('div', { className: 'stat' }, el('b', { textContent: n }), label))
     );
@@ -217,15 +217,21 @@
       const k = state.event.adminKey;
       await call('POST', { action: 'sync', key: k, guests: state.guests.map(g => ({
         token: g.token, name: g.name, size: g.size, email: g.email, phone: g.phone, group: g.group, table: g.table,
-        rsvp: g.rsvp, plusOne: g.plusOne, diet: g.diet, override: !!g.dirty })) });
+        rsvp: g.rsvp, count: g.count, plusOne: g.plusOne, diet: g.diet, override: !!g.dirty })) });
       state.guests.forEach(g => delete g.dirty);
       const { guests } = await call('GET', null, { action: 'all', key: k });
       let updated = 0;
       for (const r of guests) {
-        const g = state.guests.find(x => x.token === r.token);
-        if (!g) continue;
-        const next = { rsvp: r.rsvp || 'pending', plusOne: r.plusOne || '', diet: r.diet || '', respondedAt: r.respondedAt || '' };
-        if (Object.keys(next).some(f => (g[f] || '') !== next[f])) { Object.assign(g, next); updated++; }
+        let g = state.guests.find(x => x.token === r.token);
+        const isNew = !g;
+        if (!g) {
+          // a reply from the general link: add it to the list
+          if (!r.token || !r.name) continue;
+          g = { id: uid(), token: r.token, name: r.name, size: +r.size || 1, email: r.email || '', phone: r.phone || '', group: r.group || '', table: r.table || '' };
+          state.guests.push(g); updated++;
+        }
+        const next = { rsvp: r.rsvp || 'pending', count: r.count === '' || r.count == null ? '' : +r.count, plusOne: r.plusOne || '', diet: r.diet || '', respondedAt: r.respondedAt || '' };
+        if (Object.keys(next).some(f => String(g[f] ?? '') !== String(next[f]))) { Object.assign(g, next); if (!isNew) updated++; }
       }
       save(); renderGuests(); renderShareList();
       status.textContent = `Synced. ${updated} guest${updated === 1 ? '' : 's'} updated.`;
@@ -259,80 +265,15 @@
     if (t === 'share') { renderShare(); renderShareList(); }
   };
 
-  // ---------- guest-facing invite ----------
-  const longDate = d => d ? new Date(`${d}T12:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : '';
-  const placeCard = (label, name, addr) => el('div', { className: 'place' },
-    el('div', { className: 'meta', textContent: label }),
-    el('strong', { textContent: name || '' }),
-    addr ? el('div', { className: 'meta', textContent: addr }) : '',
-    name || addr ? el('a', { href: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([name, addr].filter(Boolean).join(', '))}`, target: '_blank', rel: 'noopener', textContent: 'Directions' }) : '');
-
-  function rsvpForm(e, token) {
-    const box = el('div', { className: 'rsvp' }, el('p', { className: 'muted', textContent: 'Loading your invitation...' }));
-    const get = new URL(e.scriptUrl); get.search = new URLSearchParams({ action: 'guest', token });
-    fetch(get).then(r => r.json()).then(g => {
-      if (g.error) throw new Error('nf');
-      let choice = g.rsvp === 'yes' || g.rsvp === 'no' ? g.rsvp : '';
-      const yes = el('button', { type: 'button', textContent: 'Joyfully accepts' });
-      const no = el('button', { type: 'button', textContent: 'Regretfully declines' });
-      const plus = el('input', { value: g.plusOne || '', maxLength: 100 });
-      const diet = el('input', { value: g.diet || '', maxLength: 100 });
-      const plusLabel = el('label', {}, +g.size === 2 ? 'Plus-one name' : 'Names of the others in your party', plus);
-      const dietLabel = el('label', {}, 'Dietary needs', diet);
-      const send = el('button', { type: 'button', className: 'primary', textContent: 'Send your response' });
-      const msg = el('p', { className: 'muted', role: 'status' });
-      const paint = () => {
-        yes.className = choice === 'yes' ? 'on' : ''; no.className = choice === 'no' ? 'on' : '';
-        plusLabel.hidden = !(choice === 'yes' && +g.size > 1); dietLabel.hidden = choice !== 'yes';
-        send.disabled = !choice;
-      };
-      yes.onclick = () => { choice = 'yes'; paint(); };
-      no.onclick = () => { choice = 'no'; paint(); };
-      send.onclick = async () => {
-        send.disabled = true; msg.textContent = 'Sending...';
-        try {
-          const r = await fetch(e.scriptUrl, { method: 'POST', body: JSON.stringify({ action: 'respond', token, rsvp: choice,
-            plusOne: choice === 'yes' ? plus.value : '', diet: choice === 'yes' ? diet.value : '' }) });
-          const j = await r.json();
-          if (!j.ok) throw new Error(j.error);
-          msg.textContent = choice === 'yes' ? 'Thank you! We cannot wait to celebrate with you. You can change your answer here until the deadline.' : 'Thank you for letting us know. We will miss you.';
-        } catch { msg.textContent = 'Sorry, that did not go through. Please try again or contact us directly.'; }
-        paint();
-      };
-      box.replaceChildren(
-        el('p', { className: 'muted', textContent: `Dear ${g.name}, will you attend?` }),
-        el('div', { className: 'choice' }, yes, no), plusLabel, dietLabel, send, msg);
-      paint();
-    }).catch(() => box.replaceChildren(el('p', { className: 'muted', textContent: 'We could not find your personal invitation. Please check the link or contact us.' })));
-    return box;
-  }
-
+  // ---------- guest-facing site ----------
   function showInvite(e, token) {
-    document.title = e.couple ? `${e.couple}: Wedding invitation` : 'Wedding invitation';
+    document.title = e.couple ? `${e.couple} are getting married` : 'Wedding invitation';
+    document.body.classList.add('site');
+    document.querySelector('.top').hidden = true;
     $('#tabs').hidden = true;
     document.querySelector('main').hidden = true;
-    $('#title').textContent = e.couple || 'You are invited';
-    $('#subtitle').textContent = fmtDate(e.date, e.time);
-    const inv = $('#invite'); inv.hidden = false;
-    const sched = (e.schedule || []).map(s => {
-      const t = s.time ? new Date(`2000-01-01T${s.time}`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
-      return el('li', {}, el('strong', { textContent: t }), ` ${s.what || ''}`);
-    });
-    const reply = !token && e.contact && (e.contact.includes('@')
-      ? el('a', { className: 'primary', href: `mailto:${e.contact}?subject=${encodeURIComponent('RSVP')}`, textContent: 'RSVP by email' })
-      : el('a', { className: 'primary', href: `sms:${e.contact}`, textContent: 'RSVP by text' }));
-    inv.replaceChildren(el('div', { className: 'invite-card' },
-      el('p', { className: 'meta', textContent: 'YOU ARE INVITED TO THE WEDDING OF' }),
-      e.welcome ? el('p', { textContent: e.welcome }) : '',
-      el('div', { className: 'places' },
-        e.venue || e.address ? placeCard('CEREMONY', e.venue, e.address) : '',
-        e.rVenue || e.rAddress ? placeCard('RECEPTION', e.rVenue, e.rAddress) : ''),
-      sched.length ? el('ul', {}, sched) : '',
-      e.dress ? el('p', {}, el('strong', { textContent: 'Dress code: ' }), e.dress) : '',
-      e.notes ? el('p', { textContent: e.notes }) : '',
-      e.respondBy ? el('p', { className: 'meta', textContent: `Please respond by ${longDate(e.respondBy)}.` }) : '',
-      token && e.scriptUrl ? rsvpForm(e, token) : el('div', { className: 'btns' }, reply || ''),
-      e.venue || e.address ? el('iframe', { src: mapEmbed(e), title: 'Ceremony map', loading: 'lazy' }) : ''));
+    $('#invite').hidden = false;
+    renderSite(e, token);
   }
 
   // ---------- boot ----------

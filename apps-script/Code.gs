@@ -4,7 +4,7 @@
 const ADMIN_KEY = 'CHANGE-ME-to-a-long-random-string';
 
 const SHEET = 'Guests';
-const COLS = ['token', 'name', 'size', 'rsvp', 'plusOne', 'diet', 'email', 'phone', 'group', 'table', 'respondedAt'];
+const COLS = ['token', 'name', 'size', 'rsvp', 'count', 'plusOne', 'diet', 'email', 'phone', 'group', 'table', 'respondedAt'];
 
 function sheet_() {
   const ss = SpreadsheetApp.getActive();
@@ -33,7 +33,7 @@ function doGet(e) {
   if (p.action === 'guest' && p.token) {
     const g = rows_().find(r => r.token === p.token);
     if (!g) return json_({ error: 'not_found' });
-    return json_({ name: g.name, size: g.size, rsvp: g.rsvp, plusOne: g.plusOne, diet: g.diet });
+    return json_({ name: g.name, size: g.size, rsvp: g.rsvp, count: g.count, plusOne: g.plusOne, diet: g.diet });
   }
   if (p.action === 'all' && isAdmin_(p.key)) {
     return json_({ guests: rows_().map(r => { delete r._row; return r; }) });
@@ -52,9 +52,20 @@ function doPost(e) {
       const g = rows.find(r => r.token === b.token);
       if (!g) return json_({ error: 'not_found' });
       set_(g._row, 'rsvp', b.rsvp === 'yes' ? 'yes' : 'no');
+      set_(g._row, 'count', b.rsvp === 'yes' ? Math.min(Math.max(1, parseInt(b.count, 10) || 1), Math.max(1, parseInt(g.size, 10) || 1)) : 0);
       set_(g._row, 'plusOne', clean_(b.plusOne));
       set_(g._row, 'diet', clean_(b.diet));
       set_(g._row, 'respondedAt', new Date());
+      return json_({ ok: true });
+    }
+    if (b.action === 'open') {
+      // Reply from the general link: always adds a new row, never edits an existing guest.
+      const name = clean_(b.name).trim();
+      if (b.hp || !name || rows.length >= 2000) return json_({ error: 'rejected' });
+      const yes = b.rsvp === 'yes';
+      const count = yes ? Math.min(Math.max(1, parseInt(b.count, 10) || 1), 10) : 0;
+      sheet_().appendRow([Utilities.getUuid().replace(/-/g, '').slice(0, 24), name, count || 1, yes ? 'yes' : 'no', count,
+        clean_(b.plusOne), clean_(b.diet), '', '', 'Website RSVP', '', new Date()]);
       return json_({ ok: true });
     }
     if (!isAdmin_(b.key)) return json_({ error: 'forbidden' });
@@ -63,7 +74,7 @@ function doPost(e) {
         const ex = rows.find(r => r.token === g.token);
         if (ex) {
           ['name', 'size', 'email', 'phone', 'group', 'table'].forEach(c => set_(ex._row, c, clean_(g[c])));
-          if (g.override) ['rsvp', 'plusOne', 'diet'].forEach(c => set_(ex._row, c, clean_(g[c])));
+          if (g.override) ['rsvp', 'count', 'plusOne', 'diet'].forEach(c => set_(ex._row, c, clean_(g[c])));
         } else {
           sheet_().appendRow(COLS.map(c => c === 'respondedAt' ? '' : clean_(c === 'rsvp' ? (g.rsvp || 'pending') : g[c])));
         }
