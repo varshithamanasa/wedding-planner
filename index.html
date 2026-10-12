@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Our Wedding Planner</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <h1 id="title">Our Wedding</h1>
+  <p id="subtitle" class="muted"></p>
+</header>
+
+<nav id="tabs" class="tabs" role="tablist">
+  <button data-tab="guests" class="active" role="tab">Guests</button>
+  <button data-tab="event" role="tab">Event &amp; directions</button>
+  <button data-tab="share" role="tab">Share</button>
+</nav>
+
+<main>
+  <!-- GUESTS -->
+  <section id="tab-guests" class="panel">
+    <div class="stats" id="stats"></div>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Search guests">
+      <select id="filter" aria-label="Filter by RSVP">
+        <option value="all">All</option>
+        <option value="pending">Pending</option>
+        <option value="yes">Attending</option>
+        <option value="no">Declined</option>
+      </select>
+      <button id="addGuest" class="primary">Add guest</button>
+    </div>
+    <ul id="guestList" class="list"></ul>
+    <div class="row">
+      <button id="exportCsv">Export CSV</button>
+      <button id="importCsv">Import CSV</button>
+      <input id="csvFile" type="file" accept=".csv" hidden>
+    </div>
+  </section>
+
+  <!-- EVENT -->
+  <section id="tab-event" class="panel" hidden>
+    <form id="eventForm" class="form">
+      <label>Couple names<input name="couple" placeholder="Alex &amp; Sam"></label>
+      <div class="two">
+        <label>Date<input name="date" type="date"></label>
+        <label>Time<input name="time" type="time"></label>
+      </div>
+      <label>Venue name<input name="venue" placeholder="Rosewood Gardens"></label>
+      <label>Venue address<input name="address" placeholder="123 Main St, City, State"></label>
+      <label>Parking and travel notes<textarea name="notes" rows="3" placeholder="Free parking behind the hall. Shuttle from the hotel at 3:30 pm."></textarea></label>
+      <label>Dress code<input name="dress" placeholder="Garden formal"></label>
+      <label>Reply to (email or phone)<input name="contact" placeholder="we@example.com"></label>
+      <fieldset>
+        <legend>Schedule</legend>
+        <div id="schedule"></div>
+        <button type="button" id="addItem">Add schedule item</button>
+      </fieldset>
+      <button class="primary" type="submit">Save details</button>
+      <span id="saved" class="muted" aria-live="polite"></span>
+    </form>
+    <div id="mapBox"></div>
+  </section>
+
+  <!-- SHARE -->
+  <section id="tab-share" class="panel" hidden>
+    <p>This creates a private link with your event details and directions. It does not include your guest list. Anyone with the link can view it.</p>
+    <textarea id="shareLink" rows="4" readonly></textarea>
+    <div class="row">
+      <button id="copyLink" class="primary">Copy link</button>
+      <button id="nativeShare">Share</button>
+      <button id="previewLink">Preview as guest</button>
+    </div>
+    <h3>Message guests individually</h3>
+    <p class="muted">Send the link by text or email to each guest, or to everyone with an email on file.</p>
+    <ul id="shareList" class="list"></ul>
+    <button id="emailAll">Email everyone with an address</button>
+  </section>
+</main>
+
+<!-- Guest-facing invite page, shown when the URL contains an invite link -->
+<main id="invite" hidden></main>
+
+<dialog id="guestDialog">
+  <form method="dialog" id="guestForm" class="form">
+    <h2 id="dlgTitle">Add guest</h2>
+    <label>Name<input name="name" required></label>
+    <div class="two">
+      <label>Party size<input name="size" type="number" min="1" value="1"></label>
+      <label>RSVP
+        <select name="rsvp">
+          <option value="pending">Pending</option>
+          <option value="yes">Attending</option>
+          <option value="no">Declined</option>
+        </select>
+      </label>
+    </div>
+    <div class="two">
+      <label>Email<input name="email" type="email"></label>
+      <label>Phone<input name="phone" type="tel"></label>
+    </div>
+    <div class="two">
+      <label>Group<input name="group" placeholder="Family, friends, work"></label>
+      <label>Table<input name="table"></label>
+    </div>
+    <label>Dietary needs<input name="diet"></label>
+    <div class="row">
+      <button value="save" class="primary" id="saveGuest">Save</button>
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button type="button" id="deleteGuest" class="danger">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
