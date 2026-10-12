@@ -29,7 +29,6 @@
     });
     const hero = el('section', { className: 'hero' },
       title,
-      el('div', { className: 'orn', 'aria-hidden': 'true' }, el('i')),
       el('p', { className: 'kicker', textContent: 'Are getting married' }),
       dateLine ? el('p', { className: 'lead', textContent: dateLine }) : '',
       e.venue ? el('p', { className: 'lead', textContent: e.venue }) : '');
@@ -85,7 +84,7 @@
     pill.onclick = () => setOpen(!drawer.classList.contains('open'));
     document.addEventListener('keydown', ev => { if (ev.key === 'Escape') setOpen(false); });
 
-    root.replaceChildren(el('div', { className: 'bg', 'aria-hidden': 'true' }), nav, hero, expect, el('div', { className: 'border-band', 'aria-hidden': 'true' }), cream, drawer);
+    root.replaceChildren(el('div', { className: 'bg', 'aria-hidden': 'true' }), nav, hero, expect, cream, drawer);
 
     // nav turns dark over the cream section; the pill label follows scroll position
     const onScroll = () => {
